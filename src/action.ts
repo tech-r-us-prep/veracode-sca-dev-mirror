@@ -19,6 +19,7 @@ const options: Options = {
     "no-graphs": core.getBooleanInput('no-graphs'),
     recursive: core.getBooleanInput('recursive'),
     "skip-collectors": core.getInput('skip-collectors').split(','),
+    "scan-collectors": core.getInput('scan-collectors').split(','),
     platformType: core.getInput('platformType'),
     breakBuildOnPolicyFindings: core.getInput('breakBuildOnPolicyFindings')
 }

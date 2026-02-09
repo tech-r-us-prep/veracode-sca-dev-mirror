@@ -14,6 +14,7 @@ const options: Options = {
     path: '.',
     debug:false,
     "skip-collectors": [],
+    "scan-collectors": [],
     allowDirty: false,
     recursive:false,
     "skip-vms":false,

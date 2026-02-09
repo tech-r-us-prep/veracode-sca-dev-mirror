@@ -37,6 +37,10 @@ inputs:
     description: "Run the SRCCLR with the `--skip-collectors` options"
     required: false
     default: "false"
+  scan-collectors:
+    description: "Run the SRCCLR with the `--scan-collectors` options with comma separated values"
+    required: false
+    default: ""
   allow-dirty:
     description: "Run the SRCCLR with the `--allow-dirty` option"
     required: false
@@ -61,6 +65,9 @@ inputs:
     description: "Break the build based on the Policy Findings"
     required: false
     default: "false"
+outputs:
+  scan-url:
+    description: "URL to the Veracode SCA scan results report"
 runs:
   using: 'node20'
   main: 'dist/index.js'
