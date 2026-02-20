@@ -130,22 +130,25 @@ export async function runAction(options: Options) {
         const noGraphs = options["no-graphs"]
         const skipVMS = options["skip-vms"]
 
-        const commandOutput = options.createIssues ? `--json=${SCA_OUTPUT_FILE}` : '';
+        const shouldGenerateJson = options.createIssues || options.jsonOutput;
+        const commandOutput = options.createIssues || options.jsonOutput ? `--json=${SCA_OUTPUT_FILE}` : '';
         extraCommands = `${extraCommands}${options.recursive ? '--recursive ' : ''}${options.quick ? '--quick ' : ''}${options.allowDirty ? '--allow-dirty ' : ''}${options.updateAdvisor ? '--update-advisor ' : ''}${skipVMS ? '--skip-vms ' : ''}${noGraphs ? '--no-graphs ' : ''}${options.debug ? '--debug ' : ''}${skipCollectorsAttr}${scanCollectorsAttr}`;
 
         if (runnerOS == 'Windows') {
             const powershellCommand = `powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest https://sca-downloads.veracode.com/ci.ps1 -OutFile $env:TEMP\\ci.ps1; & $env:TEMP\\ci.ps1 -s -- scan ${extraCommands} ${commandOutput}"`
 
-            if (options.createIssues) {
+            if (shouldGenerateJson) {
                 core.info('Starting the scan')
                 let output: string = ''
                 try {
                     output = execSync(powershellCommand, { encoding: 'utf-8', maxBuffer: 1024 * 1024 * 10 });//10MB
-                    core.info('Create issue "true" - on close')
+                    if (options.createIssues) {
+                        core.info('Create issue "true" - on close')
+                    }
                     if (core.isDebug()) {
                         core.info(output);
                     }
-                    
+
                     // Extract and set scan URL output
                     const scanUrl = extractScanUrl(output);
                     if (scanUrl) {
@@ -157,11 +160,11 @@ export async function runAction(options: Options) {
                 }
                 catch (error: any) {
                     if (error.status != null && error.status > 0 && (options.breakBuildOnPolicyFindings == 'true')) {
-                        let summary_info = "Veraocde SCA Scan failed with exit code " + error.statuscode + "\n"
+                        let summary_info = "Veracode SCA Scan failed with exit code " + error.statuscode + "\n"
                         core.info(output)
                         core.setFailed(summary_info)
                     }
-                    
+
                     // Try to extract URL even if there was an error
                     const scanUrl = extractScanUrl(output);
                     if (scanUrl) {
@@ -170,44 +173,47 @@ export async function runAction(options: Options) {
                     }
                 }
 
-                //Pull request decoration
-                core.info('check if we run on a pull request')
-                let pullRequest = process.env.GITHUB_REF
-                let isPR: any = pullRequest?.indexOf("pull")
-                let summary_message = ""
+                // PR decoration and issue generation (only if createIssues is enabled)
+                if (options.createIssues) {
+                    //Pull request decoration
+                    core.info('check if we run on a pull request')
+                    let pullRequest = process.env.GITHUB_REF
+                    let isPR: any = pullRequest?.indexOf("pull")
+                    let summary_message = ""
 
-                if (isPR >= 1) {
-                    core.info('We run on a PR, add more messaging')
-                    const context = github.context
-                    const repository: any = process.env.GITHUB_REPOSITORY
-                    const repo = repository.split("/");
-                    const commentID: any = context.payload.pull_request?.number
-                    let pr_header = '<br>![](https://www.veracode.com/themes/veracode_new/library/img/veracode-black-hires.svg)<br>'
-                    summary_message = `Veracode SCA Scan finished. Please review created and linked issues`
+                    if (isPR >= 1) {
+                        core.info('We run on a PR, add more messaging')
+                        const context = github.context
+                        const repository: any = process.env.GITHUB_REPOSITORY
+                        const repo = repository.split("/");
+                        const commentID: any = context.payload.pull_request?.number
+                        let pr_header = '<br>![](https://www.veracode.com/themes/veracode_new/library/img/veracode-black-hires.svg)<br>'
+                        summary_message = `Veracode SCA Scan finished. Please review created and linked issues`
 
-                    try {
-                        const baseUrl = process.env.GITHUB_API_URL || 'https://api.github.com';
-                        const octokit = github.getOctokit(options.github_token, { baseUrl });
+                        try {
+                            const baseUrl = process.env.GITHUB_API_URL || 'https://api.github.com';
+                            const octokit = github.getOctokit(options.github_token, { baseUrl });
 
-                        const { data: comment } = await octokit.rest.issues.createComment({
-                            owner: repo[0],
-                            repo: repo[1],
-                            issue_number: commentID,
-                            body: pr_header + summary_message,
-                        });
-                        core.info('Adding scan results message as comment to PR #' + commentID)
-                    } catch (error: any) {
-                        core.info(error);
+                            const { data: comment } = await octokit.rest.issues.createComment({
+                                owner: repo[0],
+                                repo: repo[1],
+                                issue_number: commentID,
+                                body: pr_header + summary_message,
+                            });
+                            core.info('Adding scan results message as comment to PR #' + commentID)
+                        } catch (error: any) {
+                            core.info(error);
+                        }
                     }
-                }
-                else {
-                    summary_message = `Veracode SCA Scan finished. Please review created issues`
-                }
+                    else {
+                        summary_message = `Veracode SCA Scan finished. Please review created issues`
+                    }
 
-                //Generate issues
-                run(options, core.info);
+                    //Generate issues
+                    run(options, core.info);
 
-                core.info(summary_message);
+                    core.info(summary_message);
+                }
 
                 //store output files as artifacts
                 core.info('Store json Results as Artifact')
@@ -278,7 +284,7 @@ export async function runAction(options: Options) {
                     }
                     
                     if (error.status != null && error.status > 0 && (options.breakBuildOnPolicyFindings == 'true')) {
-                        let summary_info = "Veraocde SCA Scan failed with exit code " + error.statuscode + "\n"
+                        let summary_info = "Veracode SCA Scan failed with exit code " + error.statuscode + "\n"
                         core.setFailed(summary_info)
                     }
                     
@@ -357,7 +363,7 @@ export async function runAction(options: Options) {
 
 
                     let commentBody = '<br>![](https://www.veracode.com/sites/default/files/2022-04/logo_1.svg)<br>'
-                    commentBody += "<pre>Veraocde SCA Scan finished" + "\n"
+                    commentBody += "<pre>Veracode SCA Scan finished" + "\n"
                     commentBody += '\n<details><summary>Veracode SCA Scan details</summary><p>\n'
                     commentBody += output //.replace(/    /g, '&nbsp;&nbsp;&nbsp;&nbsp;');
                     commentBody += '</p></details>\n</pre>'
@@ -391,7 +397,7 @@ export async function runAction(options: Options) {
             const command = `curl -sSL https://download.sourceclear.com/ci.sh | sh -s -- scan ${extraCommands} ${commandOutput}`;
             core.info(command);
 
-            if (options.createIssues) {
+            if (shouldGenerateJson) {
                 core.info('Starting the scan')
                 const execution = spawn('sh', ['-c', command], {
                     stdio: "pipe",
@@ -415,7 +421,9 @@ export async function runAction(options: Options) {
                 });
 
                 execution.on('close', async (code) => {
-                    core.info('Create issue "true" - on close')
+                    if (options.createIssues) {
+                        core.info('Create issue "true" - on close')
+                    }
                     if (core.isDebug()) {
                         core.info(output);
                     }
@@ -442,44 +450,47 @@ export async function runAction(options: Options) {
                         }
                     }
 
-                    //Pull request decoration
-                    core.info('check if we run on a pull request')
-                    let pullRequest = process.env.GITHUB_REF
-                    let isPR: any = pullRequest?.indexOf("pull")
-                    let summary_message = ""
+                    // PR decoration and issue generation (only if createIssues is enabled)
+                    if (options.createIssues) {
+                        //Pull request decoration
+                        core.info('check if we run on a pull request')
+                        let pullRequest = process.env.GITHUB_REF
+                        let isPR: any = pullRequest?.indexOf("pull")
+                        let summary_message = ""
 
-                    if (isPR >= 1) {
-                        core.info('We run on a PR, add more messaging')
-                        const context = github.context
-                        const repository: any = process.env.GITHUB_REPOSITORY
-                        const repo = repository.split("/");
-                        const commentID: any = context.payload.pull_request?.number
-                        let pr_header = '<br>![](https://www.veracode.com/themes/veracode_new/library/img/veracode-black-hires.svg)<br>'
-                        summary_message = `Veracode SCA Scan finished with exit code: ${code}. Please review created and linked issues`
+                        if (isPR >= 1) {
+                            core.info('We run on a PR, add more messaging')
+                            const context = github.context
+                            const repository: any = process.env.GITHUB_REPOSITORY
+                            const repo = repository.split("/");
+                            const commentID: any = context.payload.pull_request?.number
+                            let pr_header = '<br>![](https://www.veracode.com/themes/veracode_new/library/img/veracode-black-hires.svg)<br>'
+                            summary_message = `Veracode SCA Scan finished with exit code: ${code}. Please review created and linked issues`
 
-                        try {
-                            const baseUrl = process.env.GITHUB_API_URL || 'https://api.github.com';
-                            const octokit = github.getOctokit(options.github_token, { baseUrl });
+                            try {
+                                const baseUrl = process.env.GITHUB_API_URL || 'https://api.github.com';
+                                const octokit = github.getOctokit(options.github_token, { baseUrl });
 
-                            const { data: comment } = await octokit.rest.issues.createComment({
-                                owner: repo[0],
-                                repo: repo[1],
-                                issue_number: commentID,
-                                body: pr_header + summary_message,
-                            });
-                            core.info('Adding scan results message as comment to PR #' + commentID)
-                        } catch (error: any) {
-                            core.info(error);
+                                const { data: comment } = await octokit.rest.issues.createComment({
+                                    owner: repo[0],
+                                    repo: repo[1],
+                                    issue_number: commentID,
+                                    body: pr_header + summary_message,
+                                });
+                                core.info('Adding scan results message as comment to PR #' + commentID)
+                            } catch (error: any) {
+                                core.info(error);
+                            }
                         }
-                    }
-                    else {
-                        summary_message = `Veracode SCA Scan finished with exit code: ${code}. Please review created issues`
-                    }
+                        else {
+                            summary_message = `Veracode SCA Scan finished with exit code: ${code}. Please review created issues`
+                        }
 
-                    //Generate issues
-                    run(options, core.info);
+                        //Generate issues
+                        run(options, core.info);
 
-                    core.info(summary_message);
+                        core.info(summary_message);
+                    }
                     // if scan was set to fail the pipeline should fail and show a summary of the scan results
                     if (code != null && code > 0) {
                         core.setFailed(summary_message)
@@ -651,7 +662,7 @@ export async function runAction(options: Options) {
 
 
                         let commentBody = '<br>![](https://www.veracode.com/sites/default/files/2022-04/logo_1.svg)<br>'
-                        commentBody += "<pre>Veraocde SCA Scan finished with exit code " + code + "\n"
+                        commentBody += "<pre>Veracode SCA Scan finished with exit code " + code + "\n"
                         commentBody += '\n<details><summary>Veracode SCA Scan details</summary><p>\n'
                         commentBody += output //.replace(/    /g, '&nbsp;&nbsp;&nbsp;&nbsp;');
                         commentBody += '</p></details>\n</pre>'
@@ -681,7 +692,7 @@ export async function runAction(options: Options) {
 
                     // if scan was set to fail the pipeline should fail and show a summary of the scan results
                     if (code != null && code > 0 && (options.breakBuildOnPolicyFindings == 'true')) {
-                        let summary_info = "Veraocde SCA Scan failed with exit code " + code + "\n"
+                        let summary_info = "Veracode SCA Scan failed with exit code " + code + "\n"
                         core.setFailed(summary_info)
                     }
                     //run(options,core.info);
