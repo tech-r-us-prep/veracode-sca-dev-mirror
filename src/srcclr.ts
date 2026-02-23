@@ -451,12 +451,12 @@ export async function runAction(options: Options) {
                     }
 
                     // PR decoration and issue generation (only if createIssues is enabled)
+                    let summary_message = ""
                     if (options.createIssues) {
                         //Pull request decoration
                         core.info('check if we run on a pull request')
                         let pullRequest = process.env.GITHUB_REF
                         let isPR: any = pullRequest?.indexOf("pull")
-                        let summary_message = ""
 
                         if (isPR >= 1) {
                             core.info('We run on a PR, add more messaging')
