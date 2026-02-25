@@ -780,7 +780,7 @@ export async function generateVulnList(options: Options): Promise<void> {
         core.info(`Working directory: ${workingDir}`);
 
         // Check if helper/cli directory exists
-        const helperCliPath = 'helper/cli';
+        const helperCliPath = `${workingDir}/helper/cli`;
         if (!existsSync(helperCliPath)) {
             core.warning(`Helper CLI directory not found at ${helperCliPath}. Skipping vulnerability list generation.`);
             return;
