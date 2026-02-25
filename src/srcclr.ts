@@ -521,9 +521,6 @@ export async function runAction(options: Options) {
 
                     const uploadResult = await artifactClient.uploadArtifact(artifactName, files, rootDirectory, artefactOptions)
 
-
-
-
                     core.info('Finish command');
                 });
 
@@ -712,8 +709,189 @@ export async function runAction(options: Options) {
             console.log(error);
         }
     }
+
+    // Generate vulnerability list if enabled (in separate try-catch)
+    try {
+        await generateVulnList(options);
+    } catch (error) {
+        if (error instanceof Error) {
+            core.error('Vulnerability list generation failed: ' + error.message);
+        } else {
+            core.error('Vulnerability list generation failed with unknown error');
+        }
+        // Don't fail the action if vulnerability list generation fails
+    }
 }
 
+
+/**
+ * Generates SCA vulnerability list using Veracode CLI
+ * This function is called at the end of runAction when sca_fix_enabled is true
+ */
+async function generateVulnList(options: Options): Promise<void> {
+    core.info('=== Starting SCA Vulnerability List Generation ===');
+
+    // Check if sca_fix_enabled is true
+    if (!options.scaFixEnabled) {
+        core.info('veracode-sca-fix is NOT enabled, skipping vulnerability list generation');
+        return;
+    }
+
+    core.info('veracode-sca-fix is enabled, proceeding with vulnerability list generation');
+
+    // Check if PR number exists in options
+    if (!options.prNumber || options.prNumber === '' || options.prNumber === '0') {
+        core.warning('No PR number found in options, skipping vulnerability list generation');
+        return;
+    }
+
+    const prNumber = parseInt(options.prNumber, 10);
+    core.info(`PR number found: ${prNumber}`);
+
+    // Check if scaResults.json exists
+    if (!existsSync(SCA_OUTPUT_FILE)) {
+        core.warning(`SCA results file not found: ${SCA_OUTPUT_FILE}. Skipping vulnerability list generation.`);
+        return;
+    }
+
+    // Check for required environment variables
+    const veracodeApiKeyId = process.env.VERACODE_API_KEY_ID;
+    const veracodeApiKeySecret = process.env.VERACODE_API_KEY_SECRET;
+
+    if (!veracodeApiKeyId || !veracodeApiKeySecret) {
+        core.warning('VERACODE_API_KEY_ID or VERACODE_API_KEY_SECRET not set. Skipping vulnerability list generation.');
+        return;
+    }
+
+    try {
+        const workingDir = process.cwd();
+        core.info(`Working directory: ${workingDir}`);
+
+        // Check if helper/cli directory exists
+        const helperCliPath = 'helper/cli';
+        if (!existsSync(helperCliPath)) {
+            core.warning(`Helper CLI directory not found at ${helperCliPath}. Skipping vulnerability list generation.`);
+            return;
+        }
+
+        // Find the CLI tar.gz file
+        const cliFiles = execSync(`ls -1 ${helperCliPath}/*.tar.gz 2>/dev/null || echo ""`, { encoding: 'utf-8' }).trim();
+        if (!cliFiles) {
+            core.warning(`No CLI tar.gz file found in ${helperCliPath}. Skipping vulnerability list generation.`);
+            return;
+        }
+
+        const cliFile = cliFiles.split('\n')[0]; // Get first file
+        const cliFileName = cliFile.replace('.tar.gz', '').split('/').pop();
+
+        core.info(`Found CLI file: ${cliFile}`);
+        core.info(`Extracting to: ${cliFileName}`);
+
+        // Extract the CLI
+        execSync(`cd ${helperCliPath} && tar -zxf ${cliFile.split('/').pop()}`, { encoding: 'utf-8' });
+
+        const cliExecutablePath = `${helperCliPath}/${cliFileName}`;
+        core.info(`CLI executable path: ${cliExecutablePath}`);
+
+        // Build the veracode fix sca command
+        const vulnListingFile = 'veracode-cli.vuln.listing.json';
+        const veracodeCommand = `${cliExecutablePath}/veracode fix sca "${workingDir}" -r "${workingDir}/${SCA_OUTPUT_FILE}" --list-only --json "${vulnListingFile}"`;
+
+        core.info(`Running command: ${veracodeCommand}`);
+
+        // Run the veracode fix sca command
+        try {
+            const output = execSync(veracodeCommand, {
+                encoding: 'utf-8',
+                env: {
+                    ...process.env,
+                    VERACODE_API_KEY_ID: veracodeApiKeyId,
+                    VERACODE_API_KEY_SECRET: veracodeApiKeySecret
+                }
+            });
+
+            core.info('Veracode CLI execution successful');
+            if (core.isDebug()) {
+                core.info(output);
+            }
+
+            // Check if vulnerability listing file was created
+            if (!existsSync(vulnListingFile)) {
+                core.warning(`Vulnerability listing file not created: ${vulnListingFile}`);
+                return;
+            }
+
+            // Upload the vulnerability listing JSON as artifact
+            core.info('Uploading SCA vulnerability listing JSON as artifact');
+            const { DefaultArtifactClient } = require('@actions/artifact');
+            const artifactV1 = require('@actions/artifact-v1');
+            let artifactClient;
+
+            if (options?.platformType === 'ENTERPRISE') {
+                artifactClient = artifactV1.create();
+                core.info('Initialized artifact client using version V1');
+            } else {
+                artifactClient = new DefaultArtifactClient();
+                core.info('Initialized artifact client using version V2');
+            }
+
+            const artifactName = 'sca-vuln-listing-json';
+            const files = [vulnListingFile];
+            const rootDirectory = workingDir;
+            const artifactOptions = {
+                continueOnError: true
+            };
+
+            await artifactClient.uploadArtifact(artifactName, files, rootDirectory, artifactOptions);
+            core.info('Successfully uploaded vulnerability listing JSON');
+
+            // Create and upload metadata
+            const metadata = {
+                repository: {
+                    branch: options.clientRepositoryBranch || '',
+                    name: options.clientRepositoryName || '',
+                    owner: options.clientRepositoryOwner || '',
+                    full_name: options.clientRepositoryFullName || ''
+                },
+                profile_name: options.profileName || '',
+                pull_request: {
+                    num: prNumber || 0
+                }
+            };
+
+            const metadataFile = 'sca-vuln-listing-metadata.json';
+            writeFileSync(metadataFile, JSON.stringify(metadata, null, 2));
+            core.info('Created metadata file');
+
+            // Upload metadata artifact
+            const metadataArtifactName = 'sca-vuln-listing-metadata';
+            const metadataFiles = [metadataFile];
+
+            await artifactClient.uploadArtifact(metadataArtifactName, metadataFiles, rootDirectory, artifactOptions);
+            core.info('Successfully uploaded vulnerability listing metadata');
+
+            core.info('=== SCA Vulnerability List Generation Complete ===');
+
+        } catch (error: any) {
+            core.error('Failed to run Veracode CLI command');
+            core.error(error.message || error);
+            if (error.stdout) {
+                core.error(`stdout: ${error.stdout}`);
+            }
+            if (error.stderr) {
+                core.error(`stderr: ${error.stderr}`);
+            }
+            // Don't fail the entire action, just log the error
+            core.warning('Vulnerability list generation failed, but continuing action execution');
+        }
+
+    } catch (error: any) {
+        core.error('Error during vulnerability list generation');
+        core.error(error.message || error);
+        // Don't fail the entire action, just log the error
+        core.warning('Vulnerability list generation failed, but continuing action execution');
+    }
+}
 
 const collectors = [
     "maven",
