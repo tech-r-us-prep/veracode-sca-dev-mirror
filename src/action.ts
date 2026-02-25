@@ -32,5 +32,5 @@ const options: Options = {
     clientRepositoryFullName: core.getInput('client_repository_full_name')
 }
 
-runAction(options);
-generateVulnList(options);
+await runAction(options);
+await generateVulnList(options);
