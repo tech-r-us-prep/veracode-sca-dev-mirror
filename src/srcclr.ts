@@ -720,6 +720,22 @@ export async function generateVulnList(options: Options): Promise<void> {
     try {
         core.info('=== Starting SCA Vulnerability List Generation ===');
 
+        // Print directory listing
+        const printDirectoryListing = (dir: string) => {
+            try {
+                const { readdirSync } = require('fs');
+                const files = readdirSync(dir);
+                core.info(`Directory listing for ${dir}:`);
+                files.forEach((file: string) => {
+                    core.info(`  - ${file}`);
+                });
+            } catch (error: any) {
+                core.warning(`Failed to list directory ${dir}: ${error.message}`);
+            }
+        };
+
+        printDirectoryListing(process.cwd());
+
         // Check if sca_fix_enabled is true
         if (!options.scaFixEnabled) {
             core.info('veracode-sca-fix is NOT enabled, skipping vulnerability list generation');
