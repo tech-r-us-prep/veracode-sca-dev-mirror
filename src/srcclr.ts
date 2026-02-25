@@ -399,28 +399,30 @@ export async function runAction(options: Options) {
 
             if (shouldGenerateJson) {
                 core.info('Starting the scan')
-                const execution = spawn('sh', ['-c', command], {
-                    stdio: "pipe",
-                    shell: false
-                });
+                await new Promise<void>((resolve, reject) => {
+                    const execution = spawn('sh', ['-c', command], {
+                        stdio: "pipe",
+                        shell: false
+                    });
 
-                execution.on('error', (data) => {
-                    core.error(data);
-                })
+                    execution.on('error', (data) => {
+                        core.error(data);
+                        reject(data);
+                    })
 
-                let output: string = '';
-                let stderrOutput: string = '';
-                execution.stdout!.on('data', (data) => {
-                    output = `${output}${data}`;
-                });
+                    let output: string = '';
+                    let stderrOutput: string = '';
+                    execution.stdout!.on('data', (data) => {
+                        output = `${output}${data}`;
+                    });
 
-                execution.stderr!.on('data', (data) => {
-                    const dataStr = data.toString();
-                    stderrOutput = `${stderrOutput}${dataStr}`;
-                    core.error(`stderr: ${dataStr}`);
-                });
+                    execution.stderr!.on('data', (data) => {
+                        const dataStr = data.toString();
+                        stderrOutput = `${stderrOutput}${dataStr}`;
+                        core.error(`stderr: ${dataStr}`);
+                    });
 
-                execution.on('close', async (code) => {
+                    execution.on('close', async (code) => {
                     if (options.createIssues) {
                         core.info('Create issue "true" - on close')
                     }
@@ -522,36 +524,40 @@ export async function runAction(options: Options) {
                     const uploadResult = await artifactClient.uploadArtifact(artifactName, files, rootDirectory, artefactOptions)
 
                     core.info('Finish command');
+                    resolve();
+                    });
                 });
 
 
             } else {
                 core.info('Command to run: ' + command)
-                const execution = spawn('sh', ['-c', command], {
-                    stdio: "pipe",
-                    shell: false
-                });
+                await new Promise<void>((resolve, reject) => {
+                    const execution = spawn('sh', ['-c', command], {
+                        stdio: "pipe",
+                        shell: false
+                    });
 
-                execution.on('error', (data) => {
-                    core.error(data);
-                })
+                    execution.on('error', (data) => {
+                        core.error(data);
+                        reject(data);
+                    })
 
-                let output: string = '';
-                let stderrOutput: string = '';
-                execution.stdout!.on('data', (data) => {
-                    const dataStr = data.toString();
-                    output = `${output}${dataStr}`;
-                    // Also log to see output in real-time
-                    core.info(dataStr);
-                });
+                    let output: string = '';
+                    let stderrOutput: string = '';
+                    execution.stdout!.on('data', (data) => {
+                        const dataStr = data.toString();
+                        output = `${output}${dataStr}`;
+                        // Also log to see output in real-time
+                        core.info(dataStr);
+                    });
 
-                execution.stderr!.on('data', (data) => {
-                    const dataStr = data.toString();
-                    stderrOutput = `${stderrOutput}${dataStr}`;
-                    core.error(`stderr: ${dataStr}`);
-                });
+                    execution.stderr!.on('data', (data) => {
+                        const dataStr = data.toString();
+                        stderrOutput = `${stderrOutput}${dataStr}`;
+                        core.error(`stderr: ${dataStr}`);
+                    });
 
-                execution.on('close', async (code) => {
+                    execution.on('close', async (code) => {
                     //core.info(output);
                     core.info(`Scan finished with exit code:  ${code}`);
 
@@ -694,6 +700,8 @@ export async function runAction(options: Options) {
                     }
                     //run(options,core.info);
                     core.info('Finish command');
+                    resolve();
+                    });
                 });
             }
         }
