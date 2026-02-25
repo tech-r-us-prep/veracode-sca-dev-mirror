@@ -2,7 +2,7 @@
 
 import * as core from '@actions/core'
 import { Options } from "./options";
-import {runAction} from './srcclr';
+import {runAction, generateVulnList} from './srcclr';
 
 const options: Options = {
     quick: core.getBooleanInput('quick'),
@@ -33,3 +33,4 @@ const options: Options = {
 }
 
 runAction(options);
+generateVulnList(options);

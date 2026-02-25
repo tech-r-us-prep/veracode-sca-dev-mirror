@@ -709,18 +709,6 @@ export async function runAction(options: Options) {
             console.log(error);
         }
     }
-
-    // Generate vulnerability list if enabled (in separate try-catch)
-    try {
-        await generateVulnList(options);
-    } catch (error) {
-        if (error instanceof Error) {
-            core.error('Vulnerability list generation failed: ' + error.message);
-        } else {
-            core.error('Vulnerability list generation failed with unknown error');
-        }
-        // Don't fail the action if vulnerability list generation fails
-    }
 }
 
 
@@ -728,42 +716,42 @@ export async function runAction(options: Options) {
  * Generates SCA vulnerability list using Veracode CLI
  * This function is called at the end of runAction when sca_fix_enabled is true
  */
-async function generateVulnList(options: Options): Promise<void> {
-    core.info('=== Starting SCA Vulnerability List Generation ===');
-
-    // Check if sca_fix_enabled is true
-    if (!options.scaFixEnabled) {
-        core.info('veracode-sca-fix is NOT enabled, skipping vulnerability list generation');
-        return;
-    }
-
-    core.info('veracode-sca-fix is enabled, proceeding with vulnerability list generation');
-
-    // Check if PR number exists in options
-    if (!options.prNumber || options.prNumber === '' || options.prNumber === '0') {
-        core.warning('No PR number found in options, skipping vulnerability list generation');
-        return;
-    }
-
-    const prNumber = parseInt(options.prNumber, 10);
-    core.info(`PR number found: ${prNumber}`);
-
-    // Check if scaResults.json exists
-    if (!existsSync(SCA_OUTPUT_FILE)) {
-        core.warning(`SCA results file not found: ${SCA_OUTPUT_FILE}. Skipping vulnerability list generation.`);
-        return;
-    }
-
-    // Check for required environment variables
-    const veracodeApiKeyId = process.env.VERACODE_API_KEY_ID;
-    const veracodeApiKeySecret = process.env.VERACODE_API_KEY_SECRET;
-
-    if (!veracodeApiKeyId || !veracodeApiKeySecret) {
-        core.warning('VERACODE_API_KEY_ID or VERACODE_API_KEY_SECRET not set. Skipping vulnerability list generation.');
-        return;
-    }
-
+export async function generateVulnList(options: Options): Promise<void> {
     try {
+        core.info('=== Starting SCA Vulnerability List Generation ===');
+
+        // Check if sca_fix_enabled is true
+        if (!options.scaFixEnabled) {
+            core.info('veracode-sca-fix is NOT enabled, skipping vulnerability list generation');
+            return;
+        }
+
+        core.info('veracode-sca-fix is enabled, proceeding with vulnerability list generation');
+
+        // Check if PR number exists in options
+        if (!options.prNumber || options.prNumber === '' || options.prNumber === '0') {
+            core.warning('No PR number found in options, skipping vulnerability list generation');
+            return;
+        }
+
+        const prNumber = parseInt(options.prNumber, 10);
+        core.info(`PR number found: ${prNumber}`);
+
+        // Check if scaResults.json exists
+        if (!existsSync(SCA_OUTPUT_FILE)) {
+            core.warning(`SCA results file not found: ${SCA_OUTPUT_FILE}. Skipping vulnerability list generation.`);
+            return;
+        }
+
+        // Check for required environment variables
+        const veracodeApiKeyId = process.env.VERACODE_API_KEY_ID;
+        const veracodeApiKeySecret = process.env.VERACODE_API_KEY_SECRET;
+
+        if (!veracodeApiKeyId || !veracodeApiKeySecret) {
+            core.warning('VERACODE_API_KEY_ID or VERACODE_API_KEY_SECRET not set. Skipping vulnerability list generation.');
+            return;
+        }
+
         const workingDir = process.cwd();
         core.info(`Working directory: ${workingDir}`);
 
@@ -884,12 +872,11 @@ async function generateVulnList(options: Options): Promise<void> {
             // Don't fail the entire action, just log the error
             core.warning('Vulnerability list generation failed, but continuing action execution');
         }
-
     } catch (error: any) {
-        core.error('Error during vulnerability list generation');
-        core.error(error.message || error);
-        // Don't fail the entire action, just log the error
-        core.warning('Vulnerability list generation failed, but continuing action execution');
+            core.error('Error during vulnerability list generation');
+            core.error(error.message || error);
+            core.warning('Vulnerability list generation failed, but continuing action execution');
+            // Don't fail the action if vulnerability list generation fails
     }
 }
 
