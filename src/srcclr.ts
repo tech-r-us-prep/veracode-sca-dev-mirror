@@ -21,6 +21,7 @@ const cleanCollectors = (inputArr: Array<string>) => {
     return allowed;
 }
 
+
 /**
  * Extracts the scan URL from the Veracode SCA output
  * Looks for a line containing "Full Report Details" followed by a URL
@@ -132,6 +133,8 @@ export async function runAction(options: Options) {
 
         const shouldGenerateJson = options.createIssues || options.jsonOutput;
         const commandOutput = options.createIssues || options.jsonOutput ? `--json=${SCA_OUTPUT_FILE}` : '';
+        // Artifact name depends on output type: TXT uses standard name, JSON uses sca-fix specific name
+        const artifactNameBase = options.jsonOutput ? 'Veracode Agent Based SCA Results Json' : 'Veracode Agent Based SCA Results';
         extraCommands = `${extraCommands}${options.recursive ? '--recursive ' : ''}${options.quick ? '--quick ' : ''}${options.allowDirty ? '--allow-dirty ' : ''}${options.updateAdvisor ? '--update-advisor ' : ''}${skipVMS ? '--skip-vms ' : ''}${noGraphs ? '--no-graphs ' : ''}${options.debug ? '--debug ' : ''}${skipCollectorsAttr}${scanCollectorsAttr}`;
 
         if (runnerOS == 'Windows') {
@@ -228,7 +231,7 @@ export async function runAction(options: Options) {
                     artifactClient = new DefaultArtifactClient();
                     core.info(`Initialized the artifact object using version V2.`);
                 }
-                const artifactName = 'Veracode Agent Based SCA Results';
+                const artifactName = artifactNameBase;
                 const files = [
                     'scaResults.json'
                 ]
@@ -334,7 +337,7 @@ export async function runAction(options: Options) {
                     artifactClient = new DefaultArtifactClient();
                     core.info(`Initialized the artifact object using version V2.`);
                 }
-                const artifactName = 'Veracode Agent Based SCA Results';
+                const artifactName = artifactNameBase;
                 const files = [
                     'scaResults.txt'
                 ]
@@ -395,6 +398,7 @@ export async function runAction(options: Options) {
         }
         else {
             const command = `curl -sSL https://download.sourceclear.com/ci.sh | sh -s -- scan ${extraCommands} ${commandOutput}`;
+
             core.info(command);
 
             if (shouldGenerateJson) {
@@ -511,7 +515,7 @@ export async function runAction(options: Options) {
                         artifactClient = new DefaultArtifactClient();
                         core.info(`Initialized the artifact object using version V2.`);
                     }
-                    const artifactName = 'Veracode Agent Based SCA Results';
+                    const artifactName = artifactNameBase;
                     const files = [
                         'scaResults.json'
                     ]
@@ -633,7 +637,7 @@ export async function runAction(options: Options) {
                         artifactClient = new DefaultArtifactClient();
                         core.info(`Initialized the artifact object using version V2.`);
                     }
-                    const artifactName = 'Veracode Agent Based SCA Results';
+                    const artifactName = artifactNameBase;
                     const files = [
                         'scaResults.txt'
                     ]
