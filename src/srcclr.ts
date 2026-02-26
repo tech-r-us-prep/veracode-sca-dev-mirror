@@ -21,95 +21,6 @@ const cleanCollectors = (inputArr: Array<string>) => {
     return allowed;
 }
 
-/**
- * Runs two SCA scans in parallel (TXT and JSON output)
- * Reuses existing execSync/spawn patterns for minimal code invasion
- */
-const runParallelScans = async (
-    platform: 'Windows' | 'Unix',
-    commands: { txt: string; json: string }
-): Promise<{ txt: any; json: any }> => {
-    if (platform === 'Windows') {
-        // Windows: Run both scans sequentially using execSync
-        // (execSync blocks, so we execute one after the other)
-        core.info('Starting parallel TXT and JSON scans on Windows');
-
-        let txtResult = { output: '', exitCode: 0 };
-        let jsonResult = { output: '', exitCode: 0 };
-
-        try {
-            core.info('Running TXT scan...');
-            txtResult.output = execSync(commands.txt, {
-                encoding: 'utf-8',
-                maxBuffer: 1024 * 1024 * 10
-            });
-        } catch (error: any) {
-            core.warning('TXT scan encountered an error, continuing...');
-            if (error.stdout) txtResult.output = error.stdout.toString();
-            txtResult.exitCode = error.status || 1;
-        }
-
-        try {
-            core.info('Running JSON scan...');
-            jsonResult.output = execSync(commands.json, {
-                encoding: 'utf-8',
-                maxBuffer: 1024 * 1024 * 10
-            });
-        } catch (error: any) {
-            core.warning('JSON scan encountered an error, continuing...');
-            if (error.stdout) jsonResult.output = error.stdout.toString();
-            jsonResult.exitCode = error.status || 1;
-        }
-
-        return { txt: txtResult, json: jsonResult };
-    } else {
-        // Unix: Run both scans in parallel using spawn
-        core.info('Starting parallel TXT and JSON scans on Unix');
-
-        const runSpawnScan = (command: string, scanType: string, env?: NodeJS.ProcessEnv): Promise<any> => {
-            return new Promise((resolve) => {
-                const spawnEnv = env ? { ...process.env, ...env } : process.env;
-                const execution = spawn('sh', ['-c', command], {
-                    stdio: "pipe",
-                    shell: false,
-                    env: spawnEnv
-                });
-
-                let output: string = '';
-                let stderrOutput: string = '';
-
-                execution.stdout!.on('data', (data) => {
-                    output += data.toString();
-                });
-
-                execution.stderr!.on('data', (data) => {
-                    const dataStr = data.toString();
-                    stderrOutput += dataStr;
-                    core.error(`${scanType} stderr: ${dataStr}`);
-                });
-
-                execution.on('close', (code) => {
-                    core.info(`${scanType} scan completed with exit code: ${code}`);
-                    resolve({ output, stderrOutput, code: code || 0 });
-                });
-
-                execution.on('error', (error) => {
-                    core.error(`${scanType} scan error: ${error}`);
-                    resolve({ output: '', stderrOutput: error.toString(), code: 1 });
-                });
-            });
-        };
-
-        // Run both scans in parallel with Promise.all
-        // Use different TMPDIR for each scan to avoid JAR file conflicts
-        const [txtResult, jsonResult] = await Promise.all([
-            runSpawnScan(commands.txt, 'TXT', { TMPDIR: '/tmp/srcclr-txt' }),
-            runSpawnScan(commands.json, 'JSON', { TMPDIR: '/tmp/srcclr-json' })
-        ]);
-
-        return { txt: txtResult, json: jsonResult };
-    }
-};
 
 /**
  * Extracts the scan URL from the Veracode SCA output
@@ -224,64 +135,10 @@ export async function runAction(options: Options) {
         const commandOutput = options.createIssues || options.jsonOutput ? `--json=${SCA_OUTPUT_FILE}` : '';
         extraCommands = `${extraCommands}${options.recursive ? '--recursive ' : ''}${options.quick ? '--quick ' : ''}${options.allowDirty ? '--allow-dirty ' : ''}${options.updateAdvisor ? '--update-advisor ' : ''}${skipVMS ? '--skip-vms ' : ''}${noGraphs ? '--no-graphs ' : ''}${options.debug ? '--debug ' : ''}${skipCollectorsAttr}${scanCollectorsAttr}`;
 
-        // Build commands for potential parallel execution (when jsonOutput: true)
-        const baseCommandPath = options.url.length > 0 ? `--url ${options.url}` : `${options.path}`;
-        const txtCommand = `powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest https://sca-downloads.veracode.com/ci.ps1 -OutFile $env:TEMP\\ci.ps1; & $env:TEMP\\ci.ps1 -s -- scan ${baseCommandPath} ${extraCommands}"`;
-        const jsonCommand = `powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest https://sca-downloads.veracode.com/ci.ps1 -OutFile $env:TEMP\\ci.ps1; & $env:TEMP\\ci.ps1 -s -- scan ${baseCommandPath} ${extraCommands} --json=${SCA_OUTPUT_FILE}"`;
-
         if (runnerOS == 'Windows') {
             const powershellCommand = `powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest https://sca-downloads.veracode.com/ci.ps1 -OutFile $env:TEMP\\ci.ps1; & $env:TEMP\\ci.ps1 -s -- scan ${extraCommands} ${commandOutput}"`
 
-            // NEW: Run parallel scans when json-output is enabled (and not creating issues)
-            if (options.jsonOutput && !options.createIssues) {
-                core.info('Running parallel TXT and JSON scans on Windows');
-                const parallelResults = await runParallelScans('Windows', { txt: txtCommand, json: jsonCommand });
-
-                let output: string = parallelResults.txt.output || '';
-                let jsonOutput: string = parallelResults.json.output || '';
-
-                // Extract scan URL from whichever result has output
-                const scanUrl = extractScanUrl(output || jsonOutput);
-                if (scanUrl) {
-                    core.setOutput('scan-url', scanUrl);
-                    core.info(`Scan URL extracted: ${scanUrl}`);
-                } else {
-                    core.info('Scan URL not found in either output');
-                }
-
-                // Store output files
-                try {
-                    writeFileSync('scaResults.txt', output);
-                    core.info('TXT results saved to scaResults.txt');
-                } catch (err) {
-                    core.warning(`Error writing TXT file: ${err}`);
-                }
-
-                // Store output files as artifacts
-                core.info('Store TXT and JSON Results as Artifacts');
-                const { DefaultArtifactClient } = require('@actions/artifact');
-                const artifactV1 = require('@actions/artifact-v1');
-                let artifactClient;
-
-                if (options?.platformType === 'ENTERPRISE') {
-                    artifactClient = artifactV1.create();
-                    core.info(`Initialized the artifact object using version V1.`);
-                } else {
-                    artifactClient = new DefaultArtifactClient();
-                    core.info(`Initialized the artifact object using version V2.`);
-                }
-                const artifactName = 'Veracode Agent Based SCA Results';
-                const files = ['scaResults.txt', 'scaResults.json'];
-
-                const rootDirectory = process.cwd();
-                const artefactOptions = {
-                    continueOnError: true
-                };
-
-                const uploadResult = await artifactClient.uploadArtifact(artifactName, files, rootDirectory, artefactOptions);
-                core.info(`Artifact upload result: ${uploadResult}`);
-                core.info('Finish command');
-            } else if (shouldGenerateJson) {
+            if (shouldGenerateJson) {
                 core.info('Starting the scan')
                 let output: string = ''
                 try {
@@ -540,65 +397,9 @@ export async function runAction(options: Options) {
         else {
             const command = `curl -sSL https://download.sourceclear.com/ci.sh | sh -s -- scan ${extraCommands} ${commandOutput}`;
 
-            // Build Unix commands for potential parallel execution (when jsonOutput: true)
-            const unixTxtCommand = `curl -sSL https://download.sourceclear.com/ci.sh | sh -s -- scan ${extraCommands}`;
-            const unixJsonCommand = `curl -sSL https://download.sourceclear.com/ci.sh | sh -s -- scan ${extraCommands} --json=${SCA_OUTPUT_FILE}`;
-
             core.info(command);
 
-            // NEW: Run parallel scans when json-output is enabled (and not creating issues)
-            if (options.jsonOutput && !options.createIssues) {
-                core.info('Running parallel TXT and JSON scans on Unix');
-                const parallelResults = await runParallelScans('Unix', { txt: unixTxtCommand, json: unixJsonCommand });
-
-                let txtOutput: string = parallelResults.txt.output || '';
-                let jsonOutput: string = parallelResults.json.output || '';
-                let txtStderr: string = parallelResults.txt.stderrOutput || '';
-                let jsonStderr: string = parallelResults.json.stderrOutput || '';
-
-                // Extract scan URL from whichever result has output
-                const combinedOutput = `${txtOutput}${txtStderr}${jsonOutput}${jsonStderr}`;
-                const scanUrl = extractScanUrl(combinedOutput);
-                if (scanUrl) {
-                    core.setOutput('scan-url', scanUrl);
-                    core.info(`✓ Scan URL extracted: ${scanUrl}`);
-                } else {
-                    core.info('Scan URL not found in any output');
-                }
-
-                // Store output files
-                try {
-                    writeFileSync('scaResults.txt', txtOutput);
-                    core.info('TXT results saved to scaResults.txt');
-                } catch (err) {
-                    core.warning(`Error writing TXT file: ${err}`);
-                }
-
-                // Store output files as artifacts
-                core.info('Store TXT and JSON Results as Artifacts');
-                const { DefaultArtifactClient } = require('@actions/artifact');
-                const artifactV1 = require('@actions/artifact-v1');
-                let artifactClient;
-
-                if (options?.platformType === 'ENTERPRISE') {
-                    artifactClient = artifactV1.create();
-                    core.info(`Initialized the artifact object using version V1.`);
-                } else {
-                    artifactClient = new DefaultArtifactClient();
-                    core.info(`Initialized the artifact object using version V2.`);
-                }
-                const artifactName = 'Veracode Agent Based SCA Results';
-                const files = ['scaResults.txt', 'scaResults.json'];
-
-                const rootDirectory = process.cwd();
-                const artefactOptions = {
-                    continueOnError: true
-                };
-
-                const uploadResult = await artifactClient.uploadArtifact(artifactName, files, rootDirectory, artefactOptions);
-                core.info(`Artifact upload result: ${uploadResult}`);
-                core.info('Finish command');
-            } else if (shouldGenerateJson) {
+            if (shouldGenerateJson) {
                 core.info('Starting the scan')
                 const execution = spawn('sh', ['-c', command], {
                     stdio: "pipe",
