@@ -756,14 +756,15 @@ export async function generateVulnList(options: Options): Promise<void> {
 
         core.info('veracode-sca-fix is enabled, proceeding with vulnerability list generation');
 
-        // Check if PR number exists in options
-        if (!options.prNumber || options.prNumber === '' || options.prNumber === '0') {
-            core.warning('No PR number found in options, skipping vulnerability list generation');
-            return;
+        // PR number is optional - the backend app will handle PR detection
+        // If provided, log it for debugging
+        let prNumber = 0;
+        if (options.prNumber && options.prNumber !== '' && options.prNumber !== '0') {
+            prNumber = parseInt(options.prNumber, 10);
+            core.info(`PR number provided: ${prNumber}`);
+        } else {
+            core.info('No PR number provided - backend app will detect PR from workflow context');
         }
-
-        const prNumber = parseInt(options.prNumber, 10);
-        core.info(`PR number found: ${prNumber}`);
 
         // Check if scaResults.json exists
         if (!existsSync(SCA_OUTPUT_FILE)) {
