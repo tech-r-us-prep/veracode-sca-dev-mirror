@@ -795,24 +795,49 @@ export async function generateVulnList(options: Options): Promise<void> {
 
         if (runnerOS === 'Windows') {
             // Windows implementation
-            // Find the CLI ps1 file
-            const findPs1Command = `powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-ChildItem -Path '${helperCliPath}' -Filter *.ps1 | Select-Object -First 1 -ExpandProperty Name"`;
-            const cliFileName = execSync(findPs1Command, { encoding: 'utf-8' }).trim();
+            // Find the CLI ps1 installer file
+            const findPs1Command = `powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-ChildItem -Path '${helperCliPath}' -Filter *.ps1 | Select-Object -First 1 -ExpandProperty FullName"`;
+            const installerFile = execSync(findPs1Command, { encoding: 'utf-8' }).trim();
 
-            if (!cliFileName || cliFileName === '') {
-                core.warning(`No CLI ps1 file found in ${helperCliPath}. Skipping vulnerability list generation.`);
+            if (!installerFile || installerFile === '') {
+                core.warning(`No CLI ps1 installer file found in ${helperCliPath}. Skipping vulnerability list generation.`);
                 return;
             }
 
-            core.info(`Found CLI file: ${cliFileName}`);
+            core.info(`Found CLI installer: ${installerFile}`);
 
-            const cliFile = `${helperCliPath}\\${cliFileName}`;
-            const cliBaseName = cliFileName.replace('.ps1', '');
+            // Run the installer to install Veracode CLI
+            core.info('Running Veracode CLI installer...');
+            try {
+                const installCommand = `powershell -NoProfile -ExecutionPolicy Bypass -File "${installerFile}"`;
+                const installOutput = execSync(installCommand, { encoding: 'utf-8' });
+                core.info('Veracode CLI installation completed');
+                if (core.isDebug()) {
+                    core.info(installOutput);
+                }
+            } catch (error: any) {
+                core.warning(`Failed to install Veracode CLI: ${error.message}`);
+                return;
+            }
 
-            core.info(`CLI file path: ${cliFile}`);
+            // The CLI is installed at $env:APPDATA\veracode\veracode.exe
+            const appDataPath = process.env.APPDATA || '';
+            if (!appDataPath) {
+                core.warning('APPDATA environment variable not found. Skipping vulnerability list generation.');
+                return;
+            }
 
-            // Build the veracode fix sca command for Windows using PowerShell
-            veracodeCommand = `powershell -NoProfile -ExecutionPolicy Bypass -Command "& '${cliFile}' fix sca '${workingDir}' -r '${workingDir}\\${SCA_OUTPUT_FILE}' --list-only --json '${vulnListingFile}'"`;
+            cliExecutablePath = `${appDataPath}\\veracode\\veracode.exe`;
+            core.info(`CLI executable path: ${cliExecutablePath}`);
+
+            // Verify the CLI was installed
+            if (!existsSync(cliExecutablePath)) {
+                core.warning(`Veracode CLI not found at ${cliExecutablePath}. Installation may have failed.`);
+                return;
+            }
+
+            // Build the veracode fix sca command for Windows
+            veracodeCommand = `"${cliExecutablePath}" fix sca "${workingDir}" -r "${workingDir}\\${SCA_OUTPUT_FILE}" --list-only --json "${vulnListingFile}"`;
 
             core.info(`Running command: ${veracodeCommand}`);
 
