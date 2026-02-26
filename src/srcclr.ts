@@ -820,24 +820,9 @@ export async function generateVulnList(options: Options): Promise<void> {
                 return;
             }
 
-            // The CLI is installed at $env:APPDATA\veracode\veracode.exe
-            const appDataPath = process.env.APPDATA || '';
-            if (!appDataPath) {
-                core.warning('APPDATA environment variable not found. Skipping vulnerability list generation.');
-                return;
-            }
-
-            cliExecutablePath = `${appDataPath}\\veracode\\veracode.exe`;
-            core.info(`CLI executable path: ${cliExecutablePath}`);
-
-            // Verify the CLI was installed
-            if (!existsSync(cliExecutablePath)) {
-                core.warning(`Veracode CLI not found at ${cliExecutablePath}. Installation may have failed.`);
-                return;
-            }
-
+            // After installation, veracode command is available in PATH
             // Build the veracode fix sca command for Windows
-            veracodeCommand = `"${cliExecutablePath}" fix sca "${workingDir}" -r "${workingDir}\\${SCA_OUTPUT_FILE}" --list-only --json "${vulnListingFile}"`;
+            veracodeCommand = `veracode fix sca "${workingDir}" -r "${workingDir}\\${SCA_OUTPUT_FILE}" --list-only --json "${vulnListingFile}"`;
 
             core.info(`Running command: ${veracodeCommand}`);
 
