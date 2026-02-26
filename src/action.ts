@@ -31,9 +31,9 @@ const options: Options = {
     clientRepositoryName: core.getInput('client_repository_name'),
     clientRepositoryOwner: core.getInput('client_repository_owner'),
     clientRepositoryFullName: core.getInput('client_repository_full_name')
-}
+};
 
-(async () => {
+async function main() {
     try {
         await runAction(options);
         // Generate vulnerability list artifacts for JSON scans when sca-fix is enabled
@@ -44,4 +44,6 @@ const options: Options = {
     } catch (error) {
         core.setFailed(error instanceof Error ? error.message : String(error));
     }
-})();
+}
+
+main();
