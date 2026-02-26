@@ -789,7 +789,7 @@ export async function generateVulnList(options: Options): Promise<void> {
             return;
         }
 
-        let cliExecutablePath: string;
+        let cliExecutablePath: string = '';
         let veracodeCommand: string;
         const vulnListingFile = 'veracode-cli.vuln.listing.json';
 
@@ -820,9 +820,37 @@ export async function generateVulnList(options: Options): Promise<void> {
                 return;
             }
 
-            // After installation, veracode command is available in PATH
-            // Build the veracode fix sca command for Windows
-            veracodeCommand = `veracode fix sca "${workingDir}" -r "${workingDir}\\${SCA_OUTPUT_FILE}" --list-only --json "${vulnListingFile}"`;
+            // Check where veracode command is located using Get-Command
+            core.info('Checking veracode command location...');
+            try {
+                const checkCommand = `powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Command veracode | Select-Object -ExpandProperty Definition"`;
+                const veracodeLocation = execSync(checkCommand, { encoding: 'utf-8' }).trim();
+                core.info(`Veracode command found at: ${veracodeLocation}`);
+                cliExecutablePath = veracodeLocation;
+            } catch (error: any) {
+                core.warning(`Could not locate veracode command using Get-Command: ${error.message}`);
+
+                // Fallback to default installation path
+                const appDataPath = process.env.APPDATA || '';
+                if (!appDataPath) {
+                    core.warning('APPDATA environment variable not found. Skipping vulnerability list generation.');
+                    return;
+                }
+
+                cliExecutablePath = `${appDataPath}\\veracode\\veracode.exe`;
+                core.info(`Falling back to expected CLI installation path: ${cliExecutablePath}`);
+            }
+
+            // Verify the CLI was installed
+            if (!existsSync(cliExecutablePath)) {
+                core.warning(`Veracode CLI not found at ${cliExecutablePath}. Installation may have failed.`);
+                return;
+            }
+
+            core.info(`Veracode CLI successfully installed and verified at: ${cliExecutablePath}`);
+
+            // Build the veracode fix sca command for Windows using full path
+            veracodeCommand = `"${cliExecutablePath}" fix sca "${workingDir}" -r "${workingDir}\\${SCA_OUTPUT_FILE}" --list-only --json "${vulnListingFile}"`;
 
             core.info(`Running command: ${veracodeCommand}`);
 
