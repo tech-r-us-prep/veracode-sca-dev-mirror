@@ -66,11 +66,13 @@ const runParallelScans = async (
         // Unix: Run both scans in parallel using spawn
         core.info('Starting parallel TXT and JSON scans on Unix');
 
-        const runSpawnScan = (command: string, scanType: string): Promise<any> => {
+        const runSpawnScan = (command: string, scanType: string, env?: NodeJS.ProcessEnv): Promise<any> => {
             return new Promise((resolve) => {
+                const spawnEnv = env ? { ...process.env, ...env } : process.env;
                 const execution = spawn('sh', ['-c', command], {
                     stdio: "pipe",
-                    shell: false
+                    shell: false,
+                    env: spawnEnv
                 });
 
                 let output: string = '';
@@ -99,9 +101,10 @@ const runParallelScans = async (
         };
 
         // Run both scans in parallel with Promise.all
+        // Use different TMPDIR for each scan to avoid JAR file conflicts
         const [txtResult, jsonResult] = await Promise.all([
-            runSpawnScan(commands.txt, 'TXT'),
-            runSpawnScan(commands.json, 'JSON')
+            runSpawnScan(commands.txt, 'TXT', { TMPDIR: '/tmp/srcclr-txt' }),
+            runSpawnScan(commands.json, 'JSON', { TMPDIR: '/tmp/srcclr-json' })
         ]);
 
         return { txt: txtResult, json: jsonResult };
