@@ -33,12 +33,15 @@ const options: Options = {
     clientRepositoryFullName: core.getInput('client_repository_full_name')
 }
 
-try {
-    runAction(options);
-    // Only generate vulnerability list for JSON scans when sca-fix is enabled
-    if (options.jsonOutput && options.scaFixEnabled) {
-        generateVulnList(options);
+(async () => {
+    try {
+        await runAction(options);
+        // Generate vulnerability list artifacts for JSON scans when sca-fix is enabled
+        // Must await to ensure scan completes before generating list
+        if (options.jsonOutput && options.scaFixEnabled) {
+            await generateVulnList(options);
+        }
+    } catch (error) {
+        core.setFailed(error instanceof Error ? error.message : String(error));
     }
-} catch (error) {
-    core.setFailed(error instanceof Error ? error.message : String(error));
-}
+})();
