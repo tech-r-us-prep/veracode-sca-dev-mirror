@@ -35,7 +35,10 @@ const options: Options = {
 
 try {
     runAction(options);
-    generateVulnList(options);
+    // Only generate vulnerability list for JSON scans when sca-fix is enabled and we have a PR number
+    if (options.jsonOutput && options.scaFixEnabled && options.prNumber) {
+        generateVulnList(options);
+    }
 } catch (error) {
     core.setFailed(error instanceof Error ? error.message : String(error));
 }
