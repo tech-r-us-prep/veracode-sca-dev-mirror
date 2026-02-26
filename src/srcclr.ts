@@ -821,25 +821,14 @@ export async function generateVulnList(options: Options): Promise<void> {
             }
 
             // Check where veracode command is located using Get-Command
-            core.info('Checking veracode command location...');
-            try {
-                const checkCommand = `powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Command veracode | Select-Object -ExpandProperty Definition"`;
-                const veracodeLocation = execSync(checkCommand, { encoding: 'utf-8' }).trim();
-                core.info(`Veracode command found at: ${veracodeLocation}`);
-                cliExecutablePath = veracodeLocation;
-            } catch (error: any) {
-                core.warning(`Could not locate veracode command using Get-Command: ${error.message}`);
-
-                // Fallback to default installation path
-                const appDataPath = process.env.APPDATA || '';
-                if (!appDataPath) {
-                    core.warning('APPDATA environment variable not found. Skipping vulnerability list generation.');
-                    return;
-                }
-
-                cliExecutablePath = `${appDataPath}\\veracode\\veracode.exe`;
-                core.info(`Falling back to expected CLI installation path: ${cliExecutablePath}`);
+            core.info('Set veracode.exe command location...');
+            const appDataPath = process.env.APPDATA || '';
+            if (!appDataPath) {
+                core.warning('APPDATA environment variable not found. Skipping vulnerability list generation.');
+                return;
             }
+            cliExecutablePath = `${appDataPath}\\veracode\\veracode.exe`;
+            core.info(`Expected Veracode CLI installation path: ${cliExecutablePath}`);
 
             // Verify the CLI was installed
             if (!existsSync(cliExecutablePath)) {
