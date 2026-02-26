@@ -780,36 +780,68 @@ export async function generateVulnList(options: Options): Promise<void> {
         core.info(`Working directory: ${workingDir}`);
 
         // Check if helper/cli directory exists
-        const helperCliPath = `${workingDir}/veracode-helper/helper/cli`;
+        const helperCliPath = runnerOS === 'Windows'
+            ? `${workingDir}\\veracode-helper\\helper\\cli`
+            : `${workingDir}/veracode-helper/helper/cli`;
+
         if (!existsSync(helperCliPath)) {
             core.warning(`Helper CLI directory not found at ${helperCliPath}. Skipping vulnerability list generation.`);
             return;
         }
 
-        // Find the CLI tar.gz file
-        const cliFiles = execSync(`ls -1 ${helperCliPath}/*.tar.gz 2>/dev/null || echo ""`, { encoding: 'utf-8' }).trim();
-        if (!cliFiles) {
-            core.warning(`No CLI tar.gz file found in ${helperCliPath}. Skipping vulnerability list generation.`);
-            return;
-        }
-
-        const cliFile = cliFiles.split('\n')[0]; // Get first file
-        const cliFileName = cliFile.replace('.tar.gz', '').split('/').pop();
-
-        core.info(`Found CLI file: ${cliFile}`);
-        core.info(`Extracting to: ${cliFileName}`);
-
-        // Extract the CLI
-        execSync(`cd ${helperCliPath} && tar -zxf ${cliFile.split('/').pop()}`, { encoding: 'utf-8' });
-
-        const cliExecutablePath = `${helperCliPath}/${cliFileName}`;
-        core.info(`CLI executable path: ${cliExecutablePath}`);
-
-        // Build the veracode fix sca command
+        let cliExecutablePath: string;
+        let veracodeCommand: string;
         const vulnListingFile = 'veracode-cli.vuln.listing.json';
-        const veracodeCommand = `${cliExecutablePath}/veracode fix sca "${workingDir}" -r "${workingDir}/${SCA_OUTPUT_FILE}" --list-only --json "${vulnListingFile}"`;
 
-        core.info(`Running command: ${veracodeCommand}`);
+        if (runnerOS === 'Windows') {
+            // Windows implementation
+            // Find the CLI ps1 file
+            const findPs1Command = `powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-ChildItem -Path '${helperCliPath}' -Filter *.ps1 | Select-Object -First 1 -ExpandProperty Name"`;
+            const cliFileName = execSync(findPs1Command, { encoding: 'utf-8' }).trim();
+
+            if (!cliFileName || cliFileName === '') {
+                core.warning(`No CLI ps1 file found in ${helperCliPath}. Skipping vulnerability list generation.`);
+                return;
+            }
+
+            core.info(`Found CLI file: ${cliFileName}`);
+
+            const cliFile = `${helperCliPath}\\${cliFileName}`;
+            const cliBaseName = cliFileName.replace('.ps1', '');
+
+            core.info(`CLI file path: ${cliFile}`);
+
+            // Build the veracode fix sca command for Windows using PowerShell
+            veracodeCommand = `powershell -NoProfile -ExecutionPolicy Bypass -Command "& '${cliFile}' fix sca '${workingDir}' -r '${workingDir}\\${SCA_OUTPUT_FILE}' --list-only --json '${vulnListingFile}'"`;
+
+            core.info(`Running command: ${veracodeCommand}`);
+
+        } else {
+            // Linux/Unix implementation
+            // Find the CLI tar.gz file
+            const cliFiles = execSync(`ls -1 ${helperCliPath}/*.tar.gz 2>/dev/null || echo ""`, { encoding: 'utf-8' }).trim();
+            if (!cliFiles) {
+                core.warning(`No CLI tar.gz file found in ${helperCliPath}. Skipping vulnerability list generation.`);
+                return;
+            }
+
+            const cliFile = cliFiles.split('\n')[0]; // Get first file
+            const cliFileName = cliFile.replace('.tar.gz', '').split('/').pop();
+
+            core.info(`Found CLI file: ${cliFile}`);
+            core.info(`Extracting to: ${cliFileName}`);
+
+            // Extract the CLI
+            execSync(`cd ${helperCliPath} && tar -zxf ${cliFile.split('/').pop()}`, { encoding: 'utf-8' });
+
+            cliExecutablePath = `${helperCliPath}/${cliFileName}`;
+            core.info(`CLI executable path: ${cliExecutablePath}`);
+
+            // Build the veracode fix sca command
+            veracodeCommand = `${cliExecutablePath}/veracode fix sca "${workingDir}" -r "${workingDir}/${SCA_OUTPUT_FILE}" --list-only --json "${vulnListingFile}"`;
+
+            core.info(`Running command: ${veracodeCommand}`);
+        }
 
         // Run the veracode fix sca command
         try {
