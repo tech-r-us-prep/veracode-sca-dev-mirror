@@ -2,7 +2,7 @@
 
 import * as core from '@actions/core'
 import { Options } from "./options";
-import {runAction, generateVulnList} from './srcclr';
+import {runAction} from './srcclr';
 
 
 const options: Options = {
@@ -33,17 +33,8 @@ const options: Options = {
     clientRepositoryFullName: core.getInput('client_repository_full_name')
 };
 
-async function main() {
-    try {
-        await runAction(options);
-        // Generate vulnerability list artifacts for JSON scans when sca-fix is enabled
-        // Must await to ensure scan completes before generating list
-        if (options.jsonOutput && options.scaFixEnabled) {
-            await generateVulnList(options);
-        }
-    } catch (error) {
-        core.setFailed(error instanceof Error ? error.message : String(error));
-    }
+try {
+    runAction(options);
+} catch (error) {
+    core.setFailed(error instanceof Error ? error.message : String(error));
 }
-
-main();
