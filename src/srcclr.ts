@@ -710,6 +710,9 @@ export async function runAction(options: Options) {
             }
         }
 
+        // Generate vulnerability list after scan completes
+        await generateVulnList(options);
+
     } catch (error) {
         if (error instanceof Error) {
             core.info('Running scan failed.')
@@ -728,7 +731,7 @@ export async function runAction(options: Options) {
  * Generates SCA vulnerability list using Veracode CLI
  * This function is called at the end of runAction when sca_fix_enabled is true
  */
-export async function generateVulnList(options: Options): Promise<void> {
+async function generateVulnList(options: Options): Promise<void> {
     try {
         core.info('=== Starting SCA Vulnerability List Generation ===');
 

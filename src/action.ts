@@ -2,7 +2,7 @@
 
 import * as core from '@actions/core'
 import { Options } from "./options";
-import {runAction, generateVulnList} from './srcclr';
+import {runAction} from './srcclr';
 
 
 const options: Options = {
@@ -35,7 +35,6 @@ const options: Options = {
 
 try {
     runAction(options);
-    generateVulnList(options);
 } catch (error) {
     core.setFailed(error instanceof Error ? error.message : String(error));
 }
