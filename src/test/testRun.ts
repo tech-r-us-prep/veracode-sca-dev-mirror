@@ -21,7 +21,14 @@ const options: Options = {
     "skip-vms":false,
     "no-graphs":false,
     platformType:'CLOUD',
-    breakBuildOnPolicyFindings:'false'
+    breakBuildOnPolicyFindings:'false',
+    scaFixEnabled: false,
+    profileName: '',
+    prNumber: '',
+    clientRepositoryBranch: '',
+    clientRepositoryName: '',
+    clientRepositoryOwner: '',
+    clientRepositoryFullName: ''
 }
 
 runAction(options);

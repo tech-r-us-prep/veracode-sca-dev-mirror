@@ -16,7 +16,14 @@ export interface Options {
     "skip-collectors": Array<string>,
     "scan-collectors": Array<string>
     platformType: string,
-    breakBuildOnPolicyFindings: string
+    breakBuildOnPolicyFindings: string,
+    scaFixEnabled: boolean,
+    profileName: string,
+    prNumber: string,
+    clientRepositoryBranch: string,
+    clientRepositoryName: string,
+    clientRepositoryOwner: string,
+    clientRepositoryFullName: string
 }
 
 
