@@ -105,9 +105,85 @@ const extractScanUrl = (output: string): string | null => {
     return null;
 }
 
-export async function runAction(options: Options) {
-    try {
+/**
+ * TEMPORARY: Sequential dual-scan wrapper for SCA Fix support
+ * When scaFixEnabled is true, runs txt scan followed by json scan in same action
+ * TODO: Remove this wrapper when scanner supports native dual output (txt + json simultaneously)
+ */
+async function runSequentialDualScans(options: Options): Promise<void> {
+    core.info('=== Starting Sequential Dual-Scan Mode ===');
+    core.info('Note: Running TXT scan first, then JSON scan sequentially to avoid deadlock');
 
+    // Run TXT scan first
+    core.info('Step 1: Running TXT scan...');
+    const txtOptions = { ...options, jsonOutput: false };
+    await runSingleScan(txtOptions);
+    core.info('✓ TXT scan completed');
+
+    // Run JSON scan second
+    core.info('Step 2: Running JSON scan...');
+    const jsonOptions = { ...options, jsonOutput: true };
+    try {
+        await runSingleScan(jsonOptions);
+        core.info('✓ JSON scan completed');
+    } catch (jsonError: any) {
+        core.warning(`JSON scan encountered an issue, but TXT results are available: ${jsonError.message || jsonError}`);
+    }
+
+    // Combine artifacts into single upload
+    core.info('Step 3: Combining scan results...');
+    await combineScanArtifacts();
+}
+
+/**
+ * Combines both scaResults.txt and scaResults.json into single artifact
+ * When scanner supports native dual output, this function can be removed
+ */
+async function combineScanArtifacts(): Promise<void> {
+    const { DefaultArtifactClient } = require('@actions/artifact');
+    const artifactV1 = require('@actions/artifact-v1');
+    let artifactClient;
+
+    const platformType = process.env.PLATFORM_TYPE || 'STANDARD';
+    if (platformType === 'ENTERPRISE') {
+        artifactClient = artifactV1.create();
+    } else {
+        artifactClient = new DefaultArtifactClient();
+    }
+
+    const files: string[] = [];
+
+    if (existsSync('scaResults.txt')) {
+        files.push('scaResults.txt');
+    }
+    if (existsSync(SCA_OUTPUT_FILE)) {
+        files.push(SCA_OUTPUT_FILE);
+    }
+
+    if (files.length === 0) {
+        core.warning('No scan results found to combine');
+        return;
+    }
+
+    try {
+        await artifactClient.uploadArtifact(
+            'Veracode Agent Based SCA Results',
+            files,
+            process.cwd(),
+            { continueOnError: true }
+        );
+        core.info(`✓ Combined artifact uploaded with ${files.length} file(s)`);
+    } catch (error: any) {
+        core.warning(`Failed to upload combined artifact: ${error.message || error}`);
+    }
+}
+
+/**
+ * Runs a single scan (txt or json based on options.jsonOutput)
+ * This is the original runAction logic extracted for reuse
+ */
+async function runSingleScan(options: Options): Promise<void> {
+    try {
         core.info('Start command');
         let extraCommands: string = '';
         if (options.url.length > 0) {
@@ -722,6 +798,27 @@ export async function runAction(options: Options) {
         } else {
             core.setFailed("unknown error");
             console.log(error);
+        }
+    }
+}
+
+/**
+ * Main entry point - routes to dual-scan or single-scan based on scaFixEnabled
+ */
+export async function runAction(options: Options) {
+    try {
+        if (options.scaFixEnabled) {
+            // Temporary dual-scan mode for SCA Fix support
+            await runSequentialDualScans(options);
+        } else {
+            // Standard single scan (backward compatible)
+            await runSingleScan(options);
+        }
+    } catch (error) {
+        if (error instanceof Error) {
+            core.setFailed(error.message);
+        } else {
+            core.setFailed("Unknown error during scan execution");
         }
     }
 }
