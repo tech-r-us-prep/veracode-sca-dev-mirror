@@ -120,9 +120,9 @@ async function runSequentialDualScans(options: Options): Promise<void> {
     await runSingleScan(txtOptions, true);  // true = skipArtifactUpload
     core.info('✓ TXT scan completed');
 
-    // Run JSON scan second (with --quick flag to use prebuilt project from first scan)
-    core.info('Step 2: Running JSON scan with --quick flag (using prebuilt project from TXT scan)...');
-    const jsonOptions = { ...options, jsonOutput: true, quick: true };
+    // Run JSON scan second
+    core.info('Step 2: Running JSON scan...');
+    const jsonOptions = { ...options, jsonOutput: true };
     try {
         await runSingleScan(jsonOptions, true);  // true = skipArtifactUpload
         core.info('✓ JSON scan completed');
