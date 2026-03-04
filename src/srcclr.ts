@@ -114,17 +114,25 @@ async function runSequentialDualScans(options: Options): Promise<void> {
     core.info('=== Starting Sequential Dual-Scan Mode ===');
     core.info('Note: Running TXT scan first, then JSON scan sequentially to avoid deadlock');
 
-    // Run TXT scan first (skip artifact upload - will combine both later)
+    // Run TXT scan first (skip artifact upload and vuln list generation - will handle both later)
     core.info('Step 1: Running TXT scan...');
     const txtOptions = { ...options, jsonOutput: false };
-    await runSingleScan(txtOptions, true);  // true = skipArtifactUpload
+    await runSingleScan(
+        txtOptions,
+        true,   // skipArtifactUpload
+        true    // skipVulnListGeneration
+    );
     core.info('✓ TXT scan completed');
 
     // Run JSON scan second
     core.info('Step 2: Running JSON scan...');
     const jsonOptions = { ...options, jsonOutput: true };
     try {
-        await runSingleScan(jsonOptions, true);  // true = skipArtifactUpload
+        await runSingleScan(
+            jsonOptions,
+            true,   // skipArtifactUpload
+            true    // skipVulnListGeneration
+        );
         core.info('✓ JSON scan completed');
     } catch (jsonError: any) {
         core.warning(`JSON scan encountered an issue, but TXT results are available: ${jsonError.message || jsonError}`);
@@ -133,6 +141,10 @@ async function runSequentialDualScans(options: Options): Promise<void> {
     // Combine both scan results into single artifact
     core.info('Step 3: Uploading combined scan results...');
     await combineScanArtifacts();
+
+    // Generate vulnerability list after both scans complete
+    core.info('Step 4: Generating vulnerability list...');
+    await generateVulnList(options);
 }
 
 /**
@@ -207,8 +219,9 @@ async function uploadArtifactIfNeeded(
  * This is the original runAction logic extracted for reuse
  * @param options - Scan options
  * @param skipArtifactUpload - If true, skip artifact upload (used in dual-scan mode where combineScanArtifacts handles it)
+ * @param skipVulnListGeneration - If true, skip vulnerability list generation (used in dual-scan mode where it's called after combining)
  */
-async function runSingleScan(options: Options, skipArtifactUpload: boolean = false): Promise<void> {
+async function runSingleScan(options: Options, skipArtifactUpload: boolean = false, skipVulnListGeneration: boolean = false): Promise<void> {
     try {
         core.info('Start command');
         let extraCommands: string = '';
@@ -771,8 +784,10 @@ async function runSingleScan(options: Options, skipArtifactUpload: boolean = fal
             }
         }
 
-        // Generate vulnerability list after scan completes
-        await generateVulnList(options);
+        // Generate vulnerability list after scan completes (skip in dual-scan mode)
+        if (!skipVulnListGeneration) {
+            await generateVulnList(options);
+        }
 
     } catch (error) {
         if (error instanceof Error) {
