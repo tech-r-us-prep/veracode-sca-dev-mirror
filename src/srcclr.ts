@@ -179,6 +179,30 @@ async function combineScanArtifacts(): Promise<void> {
 }
 
 /**
+ * Helper to upload artifact conditionally
+ * Skips upload if skipArtifactUpload is true (used in dual-scan mode)
+ */
+async function uploadArtifactIfNeeded(
+    artifactClient: any,
+    artifactName: string,
+    files: string[],
+    skipArtifactUpload: boolean,
+    fileType: 'txt' | 'json'
+): Promise<void> {
+    if (skipArtifactUpload) {
+        core.info(`Skipping ${fileType.toUpperCase()} artifact upload (will be combined with other scans)`);
+        return;
+    }
+
+    core.info(`Store ${fileType.toUpperCase()} Results as Artifact`);
+    try {
+        await artifactClient.uploadArtifact(artifactName, files, process.cwd(), { continueOnError: true });
+    } catch (error: any) {
+        core.warning(`Failed to upload ${fileType} artifact: ${error.message || error}`);
+    }
+}
+
+/**
  * Runs a single scan (txt or json based on options.jsonOutput)
  * This is the original runAction logic extracted for reuse
  * @param options - Scan options
@@ -297,33 +321,19 @@ async function runSingleScan(options: Options, skipArtifactUpload: boolean = fal
                 }
 
                 // Store output files as artifacts (skip if in dual-scan mode)
-                if (!skipArtifactUpload) {
-                    core.info('Store json Results as Artifact')
-                    const { DefaultArtifactClient } = require('@actions/artifact');
-                    const artifactV1 = require('@actions/artifact-v1');
-                    let artifactClient;
+                const { DefaultArtifactClient } = require('@actions/artifact');
+                const artifactV1 = require('@actions/artifact-v1');
+                let artifactClient;
 
-                    if (options?.platformType === 'ENTERPRISE') {
-                        artifactClient = artifactV1.create();
-                        core.info(`Initialized the artifact object using version V1.`);
-                    } else {
-                        artifactClient = new DefaultArtifactClient();
-                        core.info(`Initialized the artifact object using version V2.`);
-                    }
-                    const artifactName = artifactNameBase;
-                    const files = [
-                        'scaResults.json'
-                    ]
-
-                    const rootDirectory = process.cwd()
-                    const artefactOptions = {
-                        continueOnError: true
-                    }
-
-                    await artifactClient.uploadArtifact(artifactName, files, rootDirectory, artefactOptions)
+                if (options?.platformType === 'ENTERPRISE') {
+                    artifactClient = artifactV1.create();
+                    core.info(`Initialized the artifact object using version V1.`);
                 } else {
-                    core.info('Skipping artifact upload (will be combined with other scans)');
+                    artifactClient = new DefaultArtifactClient();
+                    core.info(`Initialized the artifact object using version V2.`);
                 }
+
+                await uploadArtifactIfNeeded(artifactClient, artifactNameBase, ['scaResults.json'], skipArtifactUpload, 'json')
 
                 core.info('Finish command');
             } else {
@@ -406,33 +416,19 @@ async function runSingleScan(options: Options, skipArtifactUpload: boolean = fal
                 // }
 
                 // Store output files as artifacts (skip if in dual-scan mode)
-                if (!skipArtifactUpload) {
-                    core.info('Store txt Results as Artifact')
-                    const { DefaultArtifactClient } = require('@actions/artifact');
-                    const artifactV1 = require('@actions/artifact-v1');
-                    let artifactClient;
+                const { DefaultArtifactClient } = require('@actions/artifact');
+                const artifactV1 = require('@actions/artifact-v1');
+                let artifactClient;
 
-                    if (options?.platformType === 'ENTERPRISE') {
-                        artifactClient = artifactV1.create();
-                        core.info(`Initialized the artifact object using version V1.`);
-                    } else {
-                        artifactClient = new DefaultArtifactClient();
-                        core.info(`Initialized the artifact object using version V2.`);
-                    }
-                    const artifactName = artifactNameBase;
-                    const files = [
-                        'scaResults.txt'
-                    ]
-
-                    const rootDirectory = process.cwd()
-                    const artefactOptions = {
-                        continueOnError: true
-                    }
-
-                    await artifactClient.uploadArtifact(artifactName, files, rootDirectory, artefactOptions)
+                if (options?.platformType === 'ENTERPRISE') {
+                    artifactClient = artifactV1.create();
+                    core.info(`Initialized the artifact object using version V1.`);
                 } else {
-                    core.info('Skipping artifact upload (will be combined with other scans)');
+                    artifactClient = new DefaultArtifactClient();
+                    core.info(`Initialized the artifact object using version V2.`);
                 }
+
+                await uploadArtifactIfNeeded(artifactClient, artifactNameBase, ['scaResults.txt'], skipArtifactUpload, 'txt')
 
 
 
@@ -588,33 +584,19 @@ async function runSingleScan(options: Options, skipArtifactUpload: boolean = fal
                     }
 
                     // Store output files as artifacts (skip if in dual-scan mode)
-                    if (!skipArtifactUpload) {
-                        core.info('Store json Results as Artifact')
-                        const { DefaultArtifactClient } = require('@actions/artifact');
-                        const artifactV1 = require('@actions/artifact-v1');
-                        let artifactClient;
+                    const { DefaultArtifactClient } = require('@actions/artifact');
+                    const artifactV1 = require('@actions/artifact-v1');
+                    let artifactClient;
 
-                        if (options?.platformType === 'ENTERPRISE') {
-                            artifactClient = artifactV1.create();
-                            core.info(`Initialized the artifact object using version V1.`);
-                        } else {
-                            artifactClient = new DefaultArtifactClient();
-                            core.info(`Initialized the artifact object using version V2.`);
-                        }
-                        const artifactName = artifactNameBase;
-                        const files = [
-                            'scaResults.json'
-                        ]
-
-                        const rootDirectory = process.cwd()
-                        const artefactOptions = {
-                            continueOnError: true
-                        }
-
-                        await artifactClient.uploadArtifact(artifactName, files, rootDirectory, artefactOptions)
+                    if (options?.platformType === 'ENTERPRISE') {
+                        artifactClient = artifactV1.create();
+                        core.info(`Initialized the artifact object using version V1.`);
                     } else {
-                        core.info('Skipping artifact upload (will be combined with other scans)');
+                        artifactClient = new DefaultArtifactClient();
+                        core.info(`Initialized the artifact object using version V2.`);
                     }
+
+                    await uploadArtifactIfNeeded(artifactClient, artifactNameBase, ['scaResults.json'], skipArtifactUpload, 'json')
 
                     core.info('Finish command');
                     resolve();
@@ -714,33 +696,19 @@ async function runSingleScan(options: Options, skipArtifactUpload: boolean = fal
                     }
 
                     // Store output files as artifacts (skip if in dual-scan mode)
-                    if (!skipArtifactUpload) {
-                        core.info('Store txt Results as Artifact')
-                        const { DefaultArtifactClient } = require('@actions/artifact');
-                        const artifactV1 = require('@actions/artifact-v1');
-                        let artifactClient;
+                    const { DefaultArtifactClient } = require('@actions/artifact');
+                    const artifactV1 = require('@actions/artifact-v1');
+                    let artifactClient;
 
-                        if (options?.platformType === 'ENTERPRISE') {
-                            artifactClient = artifactV1.create();
-                            core.info(`Initialized the artifact object using version V1.`);
-                        } else {
-                            artifactClient = new DefaultArtifactClient();
-                            core.info(`Initialized the artifact object using version V2.`);
-                        }
-                        const artifactName = artifactNameBase;
-                        const files = [
-                            'scaResults.txt'
-                        ]
-
-                        const rootDirectory = process.cwd()
-                        const artefactOptions = {
-                            continueOnError: true
-                        }
-
-                        await artifactClient.uploadArtifact(artifactName, files, rootDirectory, artefactOptions)
+                    if (options?.platformType === 'ENTERPRISE') {
+                        artifactClient = artifactV1.create();
+                        core.info(`Initialized the artifact object using version V1.`);
                     } else {
-                        core.info('Skipping artifact upload (will be combined with other scans)');
+                        artifactClient = new DefaultArtifactClient();
+                        core.info(`Initialized the artifact object using version V2.`);
                     }
+
+                    await uploadArtifactIfNeeded(artifactClient, artifactNameBase, ['scaResults.txt'], skipArtifactUpload, 'txt')
 
 
 
