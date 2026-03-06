@@ -105,9 +105,124 @@ const extractScanUrl = (output: string): string | null => {
     return null;
 }
 
-export async function runAction(options: Options) {
-    try {
+/**
+ * TEMPORARY: Sequential dual-scan wrapper for SCA Fix support
+ * When scaFixEnabled is true, runs txt scan followed by json scan in same action
+ * TODO: Remove this wrapper when scanner supports native dual output (txt + json simultaneously)
+ */
+async function runSequentialDualScans(options: Options): Promise<void> {
+    core.info('=== Starting Sequential Dual-Scan Mode ===');
+    core.info('Note: Running TXT scan first, then JSON scan sequentially to avoid deadlock');
 
+    // Run TXT scan first (skip artifact upload and vuln list generation - will handle both later)
+    core.info('Step 1: Running TXT scan...');
+    const txtOptions = { ...options, jsonOutput: false };
+    await runSingleScan(
+        txtOptions,
+        true,   // skipArtifactUpload
+        true    // skipVulnListGeneration
+    );
+    core.info('✓ TXT scan completed');
+
+    // Run JSON scan second
+    core.info('Step 2: Running JSON scan...');
+    const jsonOptions = { ...options, jsonOutput: true };
+    try {
+        await runSingleScan(
+            jsonOptions,
+            true,   // skipArtifactUpload
+            true    // skipVulnListGeneration
+        );
+        core.info('✓ JSON scan completed');
+    } catch (jsonError: any) {
+        core.warning(`JSON scan encountered an issue, but TXT results are available: ${jsonError.message || jsonError}`);
+    }
+
+    // Combine both scan results into single artifact
+    core.info('Step 3: Uploading combined scan results...');
+    await combineScanArtifacts();
+
+    // Generate vulnerability list after both scans complete
+    core.info('Step 4: Generating vulnerability list...');
+    await generateVulnList(options);
+}
+
+/**
+ * Combines both scaResults.txt and scaResults.json into single artifact
+ * When scanner supports native dual output, this function can be removed
+ */
+async function combineScanArtifacts(): Promise<void> {
+    const { DefaultArtifactClient } = require('@actions/artifact');
+    const artifactV1 = require('@actions/artifact-v1');
+    let artifactClient;
+
+    const platformType = process.env.PLATFORM_TYPE || 'STANDARD';
+    if (platformType === 'ENTERPRISE') {
+        artifactClient = artifactV1.create();
+    } else {
+        artifactClient = new DefaultArtifactClient();
+    }
+
+    const files: string[] = [];
+
+    if (existsSync('scaResults.txt')) {
+        files.push('scaResults.txt');
+    }
+    if (existsSync(SCA_OUTPUT_FILE)) {
+        files.push(SCA_OUTPUT_FILE);
+    }
+
+    if (files.length === 0) {
+        core.warning('No scan results found to combine');
+        return;
+    }
+
+    try {
+        await artifactClient.uploadArtifact(
+            'Veracode Agent Based SCA Results',
+            files,
+            process.cwd(),
+            { continueOnError: true }
+        );
+        core.info(`✓ Combined artifact uploaded with ${files.length} file(s)`);
+    } catch (error: any) {
+        core.warning(`Failed to upload combined artifact: ${error.message || error}`);
+    }
+}
+
+/**
+ * Helper to upload artifact conditionally
+ * Skips upload if skipArtifactUpload is true (used in dual-scan mode)
+ */
+async function uploadArtifactIfNeeded(
+    artifactClient: any,
+    artifactName: string,
+    files: string[],
+    skipArtifactUpload: boolean,
+    fileType: 'txt' | 'json'
+): Promise<void> {
+    if (skipArtifactUpload) {
+        core.info(`Skipping ${fileType.toUpperCase()} artifact upload (will be combined with other scans)`);
+        return;
+    }
+
+    core.info(`Store ${fileType.toUpperCase()} Results as Artifact`);
+    try {
+        await artifactClient.uploadArtifact(artifactName, files, process.cwd(), { continueOnError: true });
+    } catch (error: any) {
+        core.warning(`Failed to upload ${fileType} artifact: ${error.message || error}`);
+    }
+}
+
+/**
+ * Runs a single scan (txt or json based on options.jsonOutput)
+ * This is the original runAction logic extracted for reuse
+ * @param options - Scan options
+ * @param skipArtifactUpload - If true, skip artifact upload (used in dual-scan mode where combineScanArtifacts handles it)
+ * @param skipVulnListGeneration - If true, skip vulnerability list generation (used in dual-scan mode where it's called after combining)
+ */
+async function runSingleScan(options: Options, skipArtifactUpload: boolean = false, skipVulnListGeneration: boolean = false): Promise<void> {
+    try {
         core.info('Start command');
         let extraCommands: string = '';
         if (options.url.length > 0) {
@@ -218,8 +333,7 @@ export async function runAction(options: Options) {
                     core.info(summary_message);
                 }
 
-                //store output files as artifacts
-                core.info('Store json Results as Artifact')
+                // Store output files as artifacts (skip if in dual-scan mode)
                 const { DefaultArtifactClient } = require('@actions/artifact');
                 const artifactV1 = require('@actions/artifact-v1');
                 let artifactClient;
@@ -231,18 +345,8 @@ export async function runAction(options: Options) {
                     artifactClient = new DefaultArtifactClient();
                     core.info(`Initialized the artifact object using version V2.`);
                 }
-                const artifactName = artifactNameBase;
-                const files = [
-                    'scaResults.json'
-                ]
 
-                const rootDirectory = process.cwd()
-                const artefactOptions = {
-                    continueOnError: true
-                }
-
-                const uploadResult = await artifactClient.uploadArtifact(artifactName, files, rootDirectory, artefactOptions)
-
+                await uploadArtifactIfNeeded(artifactClient, artifactNameBase, ['scaResults.json'], skipArtifactUpload, 'json')
 
                 core.info('Finish command');
             } else {
@@ -324,8 +428,7 @@ export async function runAction(options: Options) {
                 //     console.error(err);
                 // }
 
-                //store output files as artifacts
-                core.info('Store txt Results as Artifact')
+                // Store output files as artifacts (skip if in dual-scan mode)
                 const { DefaultArtifactClient } = require('@actions/artifact');
                 const artifactV1 = require('@actions/artifact-v1');
                 let artifactClient;
@@ -337,17 +440,8 @@ export async function runAction(options: Options) {
                     artifactClient = new DefaultArtifactClient();
                     core.info(`Initialized the artifact object using version V2.`);
                 }
-                const artifactName = artifactNameBase;
-                const files = [
-                    'scaResults.txt'
-                ]
 
-                const rootDirectory = process.cwd()
-                const artefactOptions = {
-                    continueOnError: true
-                }
-
-                const uploadResult = await artifactClient.uploadArtifact(artifactName, files, rootDirectory, artefactOptions)
+                await uploadArtifactIfNeeded(artifactClient, artifactNameBase, ['scaResults.txt'], skipArtifactUpload, 'txt')
 
 
 
@@ -502,8 +596,7 @@ export async function runAction(options: Options) {
                         core.setFailed(summary_message)
                     }
 
-                    //store output files as artifacts
-                    core.info('Store json Results as Artifact')
+                    // Store output files as artifacts (skip if in dual-scan mode)
                     const { DefaultArtifactClient } = require('@actions/artifact');
                     const artifactV1 = require('@actions/artifact-v1');
                     let artifactClient;
@@ -515,17 +608,8 @@ export async function runAction(options: Options) {
                         artifactClient = new DefaultArtifactClient();
                         core.info(`Initialized the artifact object using version V2.`);
                     }
-                    const artifactName = artifactNameBase;
-                    const files = [
-                        'scaResults.json'
-                    ]
 
-                    const rootDirectory = process.cwd()
-                    const artefactOptions = {
-                        continueOnError: true
-                    }
-
-                    const uploadResult = await artifactClient.uploadArtifact(artifactName, files, rootDirectory, artefactOptions)
+                    await uploadArtifactIfNeeded(artifactClient, artifactNameBase, ['scaResults.json'], skipArtifactUpload, 'json')
 
                     core.info('Finish command');
                     resolve();
@@ -624,8 +708,7 @@ export async function runAction(options: Options) {
                         }
                     }
 
-                    //store output files as artifacts
-                    core.info('Store txt Results as Artifact')
+                    // Store output files as artifacts (skip if in dual-scan mode)
                     const { DefaultArtifactClient } = require('@actions/artifact');
                     const artifactV1 = require('@actions/artifact-v1');
                     let artifactClient;
@@ -637,17 +720,8 @@ export async function runAction(options: Options) {
                         artifactClient = new DefaultArtifactClient();
                         core.info(`Initialized the artifact object using version V2.`);
                     }
-                    const artifactName = artifactNameBase;
-                    const files = [
-                        'scaResults.txt'
-                    ]
 
-                    const rootDirectory = process.cwd()
-                    const artefactOptions = {
-                        continueOnError: true
-                    }
-
-                    const uploadResult = await artifactClient.uploadArtifact(artifactName, files, rootDirectory, artefactOptions)
+                    await uploadArtifactIfNeeded(artifactClient, artifactNameBase, ['scaResults.txt'], skipArtifactUpload, 'txt')
 
 
 
@@ -710,8 +784,10 @@ export async function runAction(options: Options) {
             }
         }
 
-        // Generate vulnerability list after scan completes
-        await generateVulnList(options);
+        // Generate vulnerability list after scan completes (skip in dual-scan mode)
+        if (!skipVulnListGeneration) {
+            await generateVulnList(options);
+        }
 
     } catch (error) {
         if (error instanceof Error) {
@@ -722,6 +798,27 @@ export async function runAction(options: Options) {
         } else {
             core.setFailed("unknown error");
             console.log(error);
+        }
+    }
+}
+
+/**
+ * Main entry point - routes to dual-scan or single-scan based on scaFixEnabled
+ */
+export async function runAction(options: Options) {
+    try {
+        if (options.scaFixEnabled) {
+            // Temporary dual-scan mode for SCA Fix support
+            await runSequentialDualScans(options);
+        } else {
+            // Standard single scan (backward compatible)
+            await runSingleScan(options);
+        }
+    } catch (error) {
+        if (error instanceof Error) {
+            core.setFailed(error.message);
+        } else {
+            core.setFailed("Unknown error during scan execution");
         }
     }
 }
