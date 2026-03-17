@@ -843,7 +843,7 @@ async function generateVulnList(options: Options): Promise<void> {
 
         // Check if PR number exists in options
         if (!options.prNumber || options.prNumber === 0 || isNaN(options.prNumber)) {
-            core.warning('No PR number found in options, skipping vulnerability list generation');
+            core.info('No PR number found in options, skipping vulnerability list generation');
             return;
         }
 
