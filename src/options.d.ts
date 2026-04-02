@@ -19,7 +19,8 @@ export interface Options {
     breakBuildOnPolicyFindings: string,
     scaFixEnabled: boolean,
     profileName: string,
-    prNumber?: number
+    prNumber?: number,
+    artifactname: string
 }
 
 

@@ -137,10 +137,13 @@ async function runSequentialDualScans(options: Options): Promise<void> {
     } catch (jsonError: any) {
         core.warning(`JSON scan encountered an issue, but TXT results are available: ${jsonError.message || jsonError}`);
     }
-
+    let artifactname = 'Veracode Agent Based SCA Results';
+    if ( options.artifactname != null && options.artifactname.length > 0 ){
+        artifactname = 'Veracode Agent Based SCA Results - '+options.artifactname;
+    }
     // Combine both scan results into single artifact
     core.info('Step 3: Uploading combined scan results...');
-    await combineScanArtifacts();
+    await combineScanArtifacts(artifactname);
 
     // Generate vulnerability list after both scans complete
     core.info('Step 4: Generating vulnerability list...');
@@ -151,7 +154,7 @@ async function runSequentialDualScans(options: Options): Promise<void> {
  * Combines both scaResults.txt and scaResults.json into single artifact
  * When scanner supports native dual output, this function can be removed
  */
-async function combineScanArtifacts(): Promise<void> {
+async function combineScanArtifacts(artifactname:string): Promise<void> {
     const { DefaultArtifactClient } = require('@actions/artifact');
     const artifactV1 = require('@actions/artifact-v1');
     let artifactClient;
@@ -179,7 +182,7 @@ async function combineScanArtifacts(): Promise<void> {
 
     try {
         await artifactClient.uploadArtifact(
-            'Veracode Agent Based SCA Results',
+            artifactname,
             files,
             process.cwd(),
             { continueOnError: true }
@@ -249,7 +252,10 @@ async function runSingleScan(options: Options, skipArtifactUpload: boolean = fal
         const shouldGenerateJson = options.createIssues || options.jsonOutput;
         const commandOutput = options.createIssues || options.jsonOutput ? `--json=${SCA_OUTPUT_FILE}` : '';
         // Artifact name depends on output type: TXT uses standard name, JSON uses sca-fix specific name
-        const artifactNameBase = options.jsonOutput ? 'Veracode Agent Based SCA Results Json' : 'Veracode Agent Based SCA Results';
+        let artifactNameBase = options.jsonOutput ? 'Veracode Agent Based SCA Results Json' : 'Veracode Agent Based SCA Results';
+        if ( options.artifactname != null && options.artifactname.length > 0 ){
+            artifactNameBase = options.jsonOutput ? `Veracode Agent Based SCA Results Json - ${options.artifactname}` : `Veracode Agent Based SCA Results - ${options.artifactname}`;
+        }
         extraCommands = `${extraCommands}${options.recursive ? '--recursive ' : ''}${options.quick ? '--quick ' : ''}${options.allowDirty ? '--allow-dirty ' : ''}${options.updateAdvisor ? '--update-advisor ' : ''}${skipVMS ? '--skip-vms ' : ''}${noGraphs ? '--no-graphs ' : ''}${options.debug ? '--debug ' : ''}${skipCollectorsAttr}${scanCollectorsAttr}`;
 
         if (runnerOS == 'Windows') {

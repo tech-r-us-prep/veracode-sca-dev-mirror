@@ -26,7 +26,8 @@ const options: Options = {
     breakBuildOnPolicyFindings: core.getInput('breakBuildOnPolicyFindings'),
     scaFixEnabled: core.getBooleanInput('sca_fix_enabled'),
     profileName: core.getInput('profile_name'),
-    prNumber: parseInt(core.getInput('pr_number'), 10)
+    prNumber: parseInt(core.getInput('pr_number'), 10),
+    artifactname: core.getInput('artifactname')
 }
 
 try {

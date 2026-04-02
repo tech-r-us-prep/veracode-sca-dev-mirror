@@ -23,7 +23,8 @@ const options: Options = {
     platformType:'CLOUD',
     breakBuildOnPolicyFindings:'false',
     scaFixEnabled: false,
-    profileName: ''
+    profileName: '',
+    artifactname: 'srcclr'
 }
 
 runAction(options);
