@@ -137,9 +137,9 @@ async function runSequentialDualScans(options: Options): Promise<void> {
     } catch (jsonError: any) {
         core.warning(`JSON scan encountered an issue, but TXT results are available: ${jsonError.message || jsonError}`);
     }
-    let artifactname = 'Veracode-Agent-Based-SCA-Results';
+    let artifactname = 'Veracode Agent Based SCA Results';
     if ( options.artifactname != null && options.artifactname.length > 0 ){
-        artifactname = 'Veracode-Agent-Based-SCA-Results-'+options.artifactname;
+        artifactname = 'Veracode Agent Based SCA Results - '+options.artifactname;
     }
     // Combine both scan results into single artifact
     core.info('Step 3: Uploading combined scan results...');
@@ -252,9 +252,9 @@ async function runSingleScan(options: Options, skipArtifactUpload: boolean = fal
         const shouldGenerateJson = options.createIssues || options.jsonOutput;
         const commandOutput = options.createIssues || options.jsonOutput ? `--json=${SCA_OUTPUT_FILE}` : '';
         // Artifact name depends on output type: TXT uses standard name, JSON uses sca-fix specific name
-        let artifactNameBase = options.jsonOutput ? 'Veracode-Agent-Based-SCA-Results-Json' : 'Veracode-Agent-Based-SCA-Results';
+        let artifactNameBase = options.jsonOutput ? 'Veracode Agent Based SCA Results Json' : 'Veracode Agent Based SCA Results';
         if ( options.artifactname != null && options.artifactname.length > 0 ){
-            artifactNameBase = options.jsonOutput ? `Veracode-Agent-Based-SCA-Results-Json-${options.artifactname}` : `Veracode-Agent-Based-SCA-Results-${options.artifactname}`;
+            artifactNameBase = options.jsonOutput ? `Veracode Agent Based SCA Results Json - ${options.artifactname}` : `Veracode Agent Based SCA Results - ${options.artifactname}`;
         }
         extraCommands = `${extraCommands}${options.recursive ? '--recursive ' : ''}${options.quick ? '--quick ' : ''}${options.allowDirty ? '--allow-dirty ' : ''}${options.updateAdvisor ? '--update-advisor ' : ''}${skipVMS ? '--skip-vms ' : ''}${noGraphs ? '--no-graphs ' : ''}${options.debug ? '--debug ' : ''}${skipCollectorsAttr}${scanCollectorsAttr}`;
 
