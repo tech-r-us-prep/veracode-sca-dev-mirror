@@ -19,7 +19,7 @@ jobs:
       - name: Run Veracode SCA
         env:
           SRCCLR_API_TOKEN: ${{ secrets.SRCCLR_API_TOKEN }}
-        uses: veracode/veracode-sca@v2.1.9
+        uses: veracode/veracode-sca@v2.1.17
 
   veracode-sast-task:
     runs-on: ubuntu-latest
@@ -33,7 +33,7 @@ jobs:
       - name: ZIP source folder
         run: zip -r app.zip src package-lock.json
       - name: Run Veracode Policy scan
-        uses: veracode/veracode-uploadandscan-action@0.2.6
+        uses: veracode/uploadandscan-action@v0.2.1
         with:
           appname: 'GitHub SCA Action'
           createprofile: false
