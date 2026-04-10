@@ -39,6 +39,7 @@ jobs:
           createprofile: false
           filepath: 'app.zip'
           scantimeout: 30
+          version: '${{ env.VERSION }}'
           vid: '${{ secrets.API_ID }}'
           vkey: '${{ secrets.API_KEY }}'
 
